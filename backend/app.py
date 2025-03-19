@@ -1,3 +1,4 @@
+import random
 from flask import Flask, request, jsonify
 import boto3
 from cryptography.fernet import Fernet
@@ -23,18 +24,21 @@ dynamodb = boto3.resource(
 
 users_table = dynamodb.Table(Config.DYNAMODB_USERS_TABLE)
 passwords_table = dynamodb.Table(Config.DYNAMODB_PASSWORDS_TABLE)
+SIMPLE_IMAGE_QUERIES = ["solid color", "geometric pattern", "abstract shape"]
 
-# for development purposes only
-fernet_key = Fernet.generate_key()
-fernet = Fernet(fernet_key)
+fernet = Fernet(Config.FERNET_KEY.encode())
+
 
 def encrypt(data):
+    print(f"Encrypting key: {fernet}")
     return fernet.encrypt(data.encode()).decode()
 
 def decrypt(data):
+    print(f"Decrypting key: {fernet}")
     return fernet.decrypt(data.encode()).decode()
 
 def hash_password(password):
+    
     return hashlib.sha256(password.encode()).hexdigest()
 
 @app.route('/register', methods=['POST'])
@@ -77,7 +81,8 @@ def get_registration_image():
 @app.route('/get_pccp_image', methods=['GET'])
 def get_pccp_image():
     headers = {"Authorization": f"Client-ID {Config.UNSPLASH_ACCESS_KEY}"}
-    params = {"query": "animal"}
+    query = random.choice(SIMPLE_IMAGE_QUERIES)
+    params = {"query": query}
     response = requests.get("https://api.unsplash.com/photos/random", headers=headers, params=params)
     if response.status_code == 200:
         image_url = response.json()['urls']['regular']
@@ -92,35 +97,39 @@ def login():
     password = data.get('password')
     coordinates = data.get('coordinates')
     hashed_password = hash_password(password)
-
+    print(coordinates)
     try:
         response = users_table.get_item(Key={'user_email': user_email})
         user = response.get('Item')
 
         if user and user['password'] == hashed_password:
+            print("User found and password matches")
+            print("Master coordinates ",user['master_coordinates'])
+            print("Coordinates ",decrypt(user['master_coordinates']))
             stored_coordinates = eval(decrypt(user['master_coordinates'])) #Decrypt and convert to list of dicts.
-            TOLERANCE = 15 # Adjust this tolerance as needed
-
+            print(stored_coordinates)
+            print(coordinates)
             if len(coordinates) != len(stored_coordinates):
-                return jsonify({'message': 'Invalid coordinates'}), 401
+                return jsonify({'message': 'Incorrect number of PCCP coordinates'}), 401
 
             matches = 0
             for coord in coordinates:
                 for stored_coord in stored_coordinates:
-                    if distance(coord, stored_coord) <= TOLERANCE:
+                    if coord['x'] == stored_coord['x'] and coord['y'] == stored_coord['y']:
                         matches += 1
                         break
-
             if matches == len(coordinates):
                 return jsonify({'message': 'Login successful'}), 200
             else:
-                return jsonify({'message': 'Invalid coordinates'}), 401
+                return jsonify({'message': 'Incorrect PCCP coordinates'}), 401
         else:
-            return jsonify({'message': 'Invalid credentials'}), 401
+            return jsonify({'message': 'Invalid email or password'}), 401
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        print(f"Login error: {e}")
+        return jsonify({'error': 'Login failed'}), 500
     
     
+
 @app.route('/store_pccp', methods=['POST'])
 def store_pccp():
     data = request.get_json()

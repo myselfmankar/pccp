@@ -1,5 +1,4 @@
-// src/components/Login.jsx
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import api from '../services/api';
 import PCCPModal from './PCCPModal';
@@ -13,6 +12,12 @@ function Login({ setIsAuthenticated }) {
     const [pccpImage, setPccpImage] = useState('');
     const [coordinates, setCoordinates] = useState([]);
     const [showPCCPModal, setShowPCCPModal] = useState(false);
+
+    useEffect(() => {
+        console.log("Updated coordinates:", coordinates);
+    }, [coordinates]);
+
+
 
     const handleSetPCCP = async () => {
         setLoading(true);
@@ -33,26 +38,40 @@ function Login({ setIsAuthenticated }) {
 
     const handlePCCPSelection = (selectedCoordinates) => {
         setCoordinates(selectedCoordinates);
+        console.log("onSelectionComplete called with:", selectedCoordinates);
         setShowPCCPModal(false);
-        handleLogin();
+        handleLogin(); // Ensure this is called
     };
 
-    const handlePCCPModalClose = () => {
-        setShowPCCPModal(false);
-    };
+
+    useEffect(() => {
+        if (coordinates.length > 0) {
+            handleLogin();
+        }
+    }, [coordinates]);
 
     const handleLogin = async () => {
-        setError('');
-        setLoading(true);
-
+        const payload = {
+            user_email: user_email,  // Use user_email instead of email
+            password: password,      // Ensure password is also correctly passed
+            coordinates: [...coordinates],  
+        };
+    
+        console.log("Login payload:", payload);
+    
         try {
+            console.log('Enter try block for login');
             const response = await api.login(user_email, password, coordinates);
+            console.log('Login response:', response);
+            console.log('Login outside if token:', response.data.token);
             if (response.data && response.data.token) {
+                console.log('Login successful:', response.data.token);
                 localStorage.setItem('token', response.data.token);
                 setIsAuthenticated(true);
                 navigate('/dashboard');
             } else {
-                setError('Login failed. Invalid credentials.');
+                console.log('Login failed:', response.data.token);
+                setError(response.data.message || 'Login failed.');
             }
         } catch (error) {
             setError('Login failed. Please check your credentials.');
@@ -60,6 +79,7 @@ function Login({ setIsAuthenticated }) {
         }
         setLoading(false);
     };
+
 
     const handleSubmit = async (e) => {
         e.preventDefault();
@@ -121,7 +141,7 @@ function Login({ setIsAuthenticated }) {
                 <PCCPModal
                     imageUrl={pccpImage}
                     onSelectionComplete={handlePCCPSelection}
-                    onClose={handlePCCPModalClose}
+                    onClose={() => setShowPCCPModal(false)}
                 />
             )}
         </div>

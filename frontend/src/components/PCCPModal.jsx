@@ -5,94 +5,130 @@ function PCCPModal({ imageUrl, onSelectionComplete, onClose }) {
     const [coordinates, setCoordinates] = useState([]);
     const canvasRef = useRef(null);
     const [errorMessage, setErrorMessage] = useState('');
+    const [gridSize, setGridSize] = useState(0);
+    const [loading, setLoading] = useState(false);
 
     useEffect(() => {
-        drawPoints();
-    }, [coordinates, imageUrl]);
-
-    const drawPoints = () => {
-        if (!canvasRef.current) return;
-        const canvas = canvasRef.current;
-        const ctx = canvas.getContext('2d');
-        ctx.clearRect(0, 0, canvas.width, canvas.height);
-
         const img = new Image();
         img.src = imageUrl;
         img.onload = () => {
-            canvas.width = img.width;
-            canvas.height = img.height;
-            ctx.drawImage(img, 0, 0);
-
-            // Draw grid
-            const gridSize = 50; // Adjust grid size as needed
-            ctx.strokeStyle = 'rgba(0, 0, 0, 0.2)'; // Light grid lines
-            for (let x = 0; x < canvas.width; x += gridSize) {
-                ctx.beginPath();
-                ctx.moveTo(x, 0);
-                ctx.lineTo(x, canvas.height);
-                ctx.stroke();
-            }
-            for (let y = 0; y < canvas.height; y += gridSize) {
-                ctx.beginPath();
-                ctx.moveTo(0, y);
-                ctx.lineTo(canvas.width, y);
-                ctx.stroke();
-            }
-
-            coordinates.forEach(point => {
-                ctx.beginPath();
-                ctx.arc(point.x, point.y, 5, 0, 2 * Math.PI);
-                ctx.fillStyle = 'red';
-                ctx.fill();
-            });
+            const area = img.width * img.height;
+            const calculatedGridSize = Math.round(Math.sqrt(0.2 * area));
+            console.log("Calculated gridSize:", calculatedGridSize);
+            setGridSize(calculatedGridSize);
         };
+    }, [imageUrl]);
 
-        if (img.complete) {
-            canvas.width = img.width;
-            canvas.height = img.height;
-            ctx.drawImage(img, 0, 0);
+    useEffect(() => {
+        drawPoints();
+    }, [coordinates, imageUrl, gridSize]);
 
-            // Draw grid
-            const gridSize = 50; // Adjust grid size as needed
-            ctx.strokeStyle = 'rgba(0, 0, 0, 0.2)'; // Light grid lines
-            for (let x = 0; x < canvas.width; x += gridSize) {
-                ctx.beginPath();
-                ctx.moveTo(x, 0);
-                ctx.lineTo(x, canvas.height);
-                ctx.stroke();
-            }
-            for (let y = 0; y < canvas.height; y += gridSize) {
-                ctx.beginPath();
-                ctx.moveTo(0, y);
-                ctx.lineTo(canvas.width, y);
-                ctx.stroke();
-            }
+    useEffect(() => {
+        console.log("Coordinates state updated:", coordinates);
+    }, [coordinates]);
 
-            coordinates.forEach(point => {
-                ctx.beginPath();
-                ctx.arc(point.x, point.y, 5, 0, 2 * Math.PI);
-                ctx.fillStyle = 'red';
-                ctx.fill();
-            });
+
+    const drawPoints = () => {
+        if (!canvasRef.current) return;
+    
+        const canvas = canvasRef.current;
+        const ctx = canvas.getContext('2d');
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+    
+        // Load the image once globally
+        if (!drawPoints.img) {
+            drawPoints.img = new Image();
+            drawPoints.img.src = imageUrl;
+            drawPoints.img.onload = () => {
+                canvas.width = drawPoints.img.width;
+                canvas.height = drawPoints.img.height;
+                drawImageAndGrid(ctx, canvas);
+            };
+        } else {
+            drawImageAndGrid(ctx, canvas);
         }
     };
+    
+    const drawImageAndGrid = (ctx, canvas) => {
+    const gridSizeX = canvas.width * 0.2;
+    const gridSizeY = canvas.height * 0.2;
 
-    const handleCanvasClick = (e) => {
-        if (coordinates.length < 3) {
-            const x = e.offsetX;
-            const y = e.offsetY;
-            setCoordinates([...coordinates, { x, y }]);
+    ctx.drawImage(drawPoints.img, 0, 0);
+
+    // Draw grid lines
+    ctx.strokeStyle = 'rgba(0, 0, 0, 1.0)';
+    ctx.lineWidth = 1;
+
+    for (let x = 0; x < canvas.width; x += gridSizeX) {
+        ctx.beginPath();
+        ctx.moveTo(x, 0);
+        ctx.lineTo(x, canvas.height);
+        ctx.stroke();
+    }
+
+    for (let y = 0; y < canvas.height; y += gridSizeY) {
+        ctx.beginPath();
+        ctx.moveTo(0, y);
+        ctx.lineTo(canvas.width, y);
+        ctx.stroke();
+    }
+
+    // Draw selected points at the CENTER of the grid cell, it's drawing on some wrong place
+    // coordinates.forEach(point => {
+    //     ctx.beginPath();
+    //     ctx.arc(
+    //         (point.x * gridSizeX) + (gridSizeX / 2),  // Center X
+    //         (point.y * gridSizeY) + (gridSizeY / 2),  // Center Y
+    //         5,  // Circle radius
+    //         0,
+    //         2 * Math.PI
+    //     );
+    //     ctx.fillStyle = 'red';
+    //     ctx.fill();
+    // });
+};
+    
+const handleCanvasClick = (e) => {
+    if (coordinates.length < 3 && canvasRef.current) {
+        const rect = canvasRef.current.getBoundingClientRect();
+        const x = e.clientX - rect.left;
+        const y = e.clientY - rect.top;
+
+        const gridSizeX = canvasRef.current.width * 0.2; // 20% of canvas width
+        const gridSizeY = canvasRef.current.height * 0.2; // 20% of canvas height
+
+        // Correct gridX and gridY calculation
+        const gridX = Math.floor(x / gridSizeX);
+        const gridY = Math.floor(y / gridSizeY);
+
+        console.log(`Grid cell selected: (${gridX}, ${gridY})`);
+
+        const newCoordinate = { x: gridX, y: gridY };
+
+        if (!coordinates.some(coord => coord.x === newCoordinate.x && coord.y === newCoordinate.y)) {
+            setCoordinates([...coordinates, newCoordinate]);
             setErrorMessage('');
+        } else {
+            setErrorMessage("Coordinate already selected.");
         }
-    };
+    }
+};
 
+    
     const handleDone = () => {
         if (coordinates.length === 3) {
-            onSelectionComplete(coordinates);
+            setLoading(true);
+            setTimeout(() => {
+                onSelectionComplete(coordinates);
+                setLoading(false);
+            }, 100);
         } else {
             setErrorMessage('Please select exactly 3 points.');
         }
     };
+
+    
+    
 
     return (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center">
