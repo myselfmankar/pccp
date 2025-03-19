@@ -1,18 +1,19 @@
 from flask import Flask, request, jsonify
 import boto3
 from cryptography.fernet import Fernet
-import os
-import hashlib
-import base64
-import requests # For Unsplash API
-from config import Config 
+import hashlib, math
+import requests
+from config import Config
 from flask_cors import CORS
 
-
 app = Flask(__name__)
-CORS(app) 
+CORS(app)
 
-# AWS Configuration
+
+def distance(p1, p2):
+    return math.sqrt((p1['x'] - p2['x'])**2 + (p1['y'] - p2['y'])**2)
+
+
 dynamodb = boto3.resource(
     'dynamodb',
     aws_access_key_id=Config.AWS_ACCESS_KEY,
@@ -23,15 +24,7 @@ dynamodb = boto3.resource(
 users_table = dynamodb.Table(Config.DYNAMODB_USERS_TABLE)
 passwords_table = dynamodb.Table(Config.DYNAMODB_PASSWORDS_TABLE)
 
-s3 = boto3.client(
-    's3',
-    aws_access_key_id=Config.AWS_ACCESS_KEY,
-    aws_secret_access_key=Config.AWS_SECRET_KEY,
-    region_name=Config.AWS_REGION
-)
-
-bucket_name = Config.S3_BUCKET_NAME
-# Generate Fernet Key (FOR HACKATHON ONLY!)
+# for development purposes only
 fernet_key = Fernet.generate_key()
 fernet = Fernet(fernet_key)
 
@@ -50,60 +43,97 @@ def register():
     user_email = data.get('user_email')
     password = data.get('password')
     hashed_password = hash_password(password)
+    coordinates = data.get('coordinates')
+    encrypted_coordinates = encrypt(str(coordinates))
+    image_url = data.get('image_url')
 
     try:
         users_table.put_item(
             Item={
                 'user_email': user_email,
                 'password': hashed_password,
+                'master_image_url': image_url,
+                'master_coordinates': encrypted_coordinates,
             }
         )
         return jsonify({'message': 'User registered successfully'}), 201
     except Exception as e:
+        print(f"Error during PutItem: {e}")
         return jsonify({'error': str(e)}), 500
+
+@app.route('/get_registration_image', methods=['GET'])
+def get_registration_image():
+    try:
+        response = users_table.scan()
+        if response['Items']:
+            item = response['Items'][0]
+            image_url = item['master_image_url']
+            return jsonify({'image_url': image_url}), 200
+        else:
+            return jsonify({'error': 'No users found'}), 404
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/get_pccp_image', methods=['GET'])
+def get_pccp_image():
+    headers = {"Authorization": f"Client-ID {Config.UNSPLASH_ACCESS_KEY}"}
+    params = {"query": "animal"}
+    response = requests.get("https://api.unsplash.com/photos/random", headers=headers, params=params)
+    if response.status_code == 200:
+        image_url = response.json()['urls']['regular']
+        return jsonify({'image_url': image_url}), 200
+    else:
+        return jsonify({'error': 'Failed to fetch image from Unsplash'}), 500
 
 @app.route('/login', methods=['POST'])
 def login():
     data = request.get_json()
     user_email = data.get('user_email')
     password = data.get('password')
+    coordinates = data.get('coordinates')
     hashed_password = hash_password(password)
 
     try:
         response = users_table.get_item(Key={'user_email': user_email})
-        if 'Item' in response and response['Item']['password'] == hashed_password:
-            return jsonify({'message': 'Login successful'}), 200
+        user = response.get('Item')
+
+        if user and user['password'] == hashed_password:
+            stored_coordinates = eval(decrypt(user['master_coordinates'])) #Decrypt and convert to list of dicts.
+            TOLERANCE = 15 # Adjust this tolerance as needed
+
+            if len(coordinates) != len(stored_coordinates):
+                return jsonify({'message': 'Invalid coordinates'}), 401
+
+            matches = 0
+            for coord in coordinates:
+                for stored_coord in stored_coordinates:
+                    if distance(coord, stored_coord) <= TOLERANCE:
+                        matches += 1
+                        break
+
+            if matches == len(coordinates):
+                return jsonify({'message': 'Login successful'}), 200
+            else:
+                return jsonify({'message': 'Invalid coordinates'}), 401
         else:
             return jsonify({'message': 'Invalid credentials'}), 401
     except Exception as e:
         return jsonify({'error': str(e)}), 500
-
-
+    
+    
 @app.route('/store_pccp', methods=['POST'])
 def store_pccp():
     data = request.get_json()
-    user_email = data.get('user_email')
+    user_name = data.get('user_name')
     site_url = data.get('site_url')
     encrypted_password = encrypt(data.get('password'))
-    coordinates = data.get('coordinates')
-    encrypted_coordinates = encrypt(str(coordinates))
-
-    # Fetch random image from Unsplash
-    headers = {"Authorization": f"Client-ID {Config.UNSPLASH_ACCESS_KEY}"}
-    response = requests.get("https://api.unsplash.com/photos/random", headers=headers)
-    if response.status_code == 200:
-        image_url = response.json()['urls']['regular']
-    else:
-        return jsonify({'error': 'Failed to fetch image from Unsplash'}), 500
 
     try:
         passwords_table.put_item(
             Item={
-                'user_email': user_email,
+                'user_name': user_name,
                 'site_url': site_url,
                 'password': encrypted_password,
-                'image_url': image_url,
-                'coordinates': encrypted_coordinates,
             }
         )
         return jsonify({'message': 'PCCP data stored successfully'}), 201
@@ -112,23 +142,44 @@ def store_pccp():
 
 @app.route('/get_password', methods=['GET'])
 def get_password():
-    user_email = request.args.get('user_email') 
-    site_url = request.args.get('site_url') 
+    user_name = request.args.get('user_name')
+    site_url = request.args.get('site_url')
 
     try:
-        response = passwords_table.get_item(Key={'user_email': user_email, 'site_url': site_url})
-        print("ok")
+        response = passwords_table.get_item(Key={'user_name': user_name, 'site_url': site_url})
         if 'Item' in response:
             item = response['Item']
             decrypted_password = decrypt(item['password'])
-            decrypted_coordinates = decrypt(item['coordinates'])
-            return jsonify({
-                'password': decrypted_password,
-                'image_url': item['image_url'],
-                'coordinates': decrypted_coordinates,
-            }), 200
+
+            user_response = users_table.get_item(Key={'user_name': user_name})
+            if 'Item' in user_response:
+                master_image_url = user_response['Item']['master_image_url']
+                master_coordinates = decrypt(user_response['Item']['master_coordinates'])
+
+                return jsonify({
+                    'password': decrypted_password,
+                    'master_image_url': master_image_url,
+                    'master_coordinates': master_coordinates,
+                }), 200
+            else:
+                return jsonify({'message': 'User not found'}), 404
         else:
             return jsonify({'message': 'Password not found'}), 404
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/get_pccp_login', methods=['POST'])
+def get_pccp_login():
+    data = request.get_json()
+    user_email = data.get('user_email')
+
+    try:
+        response = users_table.get_item(Key={'user_email': user_email})
+        user = response.get('Item')
+        if user and 'master_image_url' in user:
+            return jsonify({'image_url': user['master_image_url']}), 200
+        else:
+            return jsonify({'error': 'Image not found'}), 404
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
