@@ -2,3 +2,5 @@ flask
 boto3
 cryptography
 requests
+flask_jwt_extended
+bcrypt

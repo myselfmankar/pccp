@@ -105,12 +105,14 @@ const handleCanvasClick = (e) => {
 
         const newCoordinate = { x: gridX, y: gridY };
 
-        if (!coordinates.some(coord => coord.x === newCoordinate.x && coord.y === newCoordinate.y)) {
-            setCoordinates([...coordinates, newCoordinate]);
-            setErrorMessage('');
-        } else {
-            setErrorMessage("Coordinate already selected.");
-        }
+        setCoordinates((prevCoordinates) => {
+            if (!prevCoordinates.some(coord => coord.x === newCoordinate.x && coord.y === newCoordinate.y)) {
+                return [...prevCoordinates, newCoordinate]; // Add new coordinate
+            } else {
+                setErrorMessage("Coordinate already selected."); // Show error if duplicate
+                return prevCoordinates; // Keep the same state (no changes)
+            }
+        });
     }
 };
 
@@ -125,10 +127,7 @@ const handleCanvasClick = (e) => {
         } else {
             setErrorMessage('Please select exactly 3 points.');
         }
-    };
-
-    
-    
+    };   
 
     return (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center">

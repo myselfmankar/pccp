@@ -1,32 +1,14 @@
-import json
-from cryptography.fernet import Fernet
-from config import Config # or however you get your fernet object.
+if decrypted_coordinates is None: 
+                return jsonify({'message': 'Decryption error'}), 500
 
-coordinates = [{'x': 0, 'y': 0}, {'x': 1, 'y': 0}, {'x': 1, 'y': 1}]
+            if len(coordinates) != len(decrypted_coordinates):
+                return jsonify({'message': 'Incorrect number of PCCP coordinates'}), 401
 
-# Convert to JSON string
-coordinates_json = json.dumps(coordinates)
+            sent_coordinates_set = {(int(coord['x']), int(coord['y'])) for coord in coordinates}
+            stored_coordinates_set = {(int(coord['x']), int(coord['y'])) for coord in decrypted_coordinates}
 
-# Encrypt
-f = Config.FERNET_KEY.encode()
-encrypted_coordinates = f.encrypt(coordinates_json.encode())
-
-# Simulate storing in database (in reality, you'd save encrypted_coordinates to your db)
-stored_in_db = encrypted_coordinates
-
-print(f"Stored in database: {stored_in_db}") #this is what you get from DB
-
-# Simulate retrieving from database
-retrieved_from_db = stored_in_db
-
-# Decrypt
-try:
-    decrypted_json = f.decrypt(retrieved_from_db).decode()
-    print(f"Decrypted JSON: {decrypted_json}")
-
-    # Parse JSON
-    decrypted_coordinates = json.loads(decrypted_json)
-    print(f"Decrypted coordinates: {decrypted_coordinates}")
-
-except Exception as e:
-    print(f"Decryption or parsing error: {e}")
+            if sent_coordinates_set == stored_coordinates_set:
+                access_token = create_access_token(identity=user_email)
+                return jsonify({'access_token': access_token}), 200
+            else:
+                return jsonify({'message': 'Incorrect PCCP coordinates'}), 401

@@ -5,7 +5,7 @@ import api from '../services/api';
 import PCCPModal from './PCCPModal';
 
 function Register({ isAuthenticated }) {
-    const navigate = useNavigate();
+
     const [user_email, setUser_email] = useState('');
     const [password, setPassword] = useState('');
     const [confirmPassword, setConfirmPassword] = useState('');
@@ -22,6 +22,14 @@ function Register({ isAuthenticated }) {
             drawPoints();
         }
     }, [coordinates, showPCCPModal]);
+
+    const navigate = useNavigate();
+
+    useEffect(() => {
+        if (isAuthenticated) {
+            navigate('/dashboard');
+        }
+    }, [isAuthenticated, navigate]); 
 
     const drawPoints = () => {
         if (!canvasRef.current) return;

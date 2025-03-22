@@ -12,4 +12,5 @@ class Config:
     DYNAMODB_PASSWORDS_TABLE = os.getenv('DYNAMODB_PASSWORDS_TABLE')
     FERNET_KEY = (os.getenv('FERNET_KEY'))
     UNSPLASH_ACCESS_KEY = (os.getenv('UNSPLASH_ACCESS_KEY'))
+    JWT_SECRET_KEY = os.getenv('JWT_SECRET_KEY')
     

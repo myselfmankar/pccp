@@ -7,16 +7,10 @@ import ProtectedRoute from './components/ProtectedRoute';
 import './App.css';
 
 function App() {
-  const [isAuthenticated, setIsAuthenticated] = useState(localStorage.getItem('isAuthenticated') === 'true');
-
-  const login = () => {
-    localStorage.setItem('isAuthenticated', 'true');
-    setIsAuthenticated(true);
-  };
+  const [isAuthenticated, setIsAuthenticated] = useState(!!localStorage.getItem('token'));
 
   const logout = () => {
-    localStorage.removeItem('isAuthenticated');
-    localStorage.removeItem('userEmail');
+    localStorage.removeItem('token');
     setIsAuthenticated(false);
   };
 
@@ -24,7 +18,10 @@ function App() {
     <Router>
       <div className="container mx-auto p-4">
         <Routes>
-          <Route path="/login" element={<Login onLogin={login} isAuthenticated={isAuthenticated} />} />
+          <Route
+            path="/login"
+            element={<Login setIsAuthenticated={setIsAuthenticated} isAuthenticated={isAuthenticated} />} // Pass setIsAuthenticated
+          />
           <Route path="/register" element={<Register isAuthenticated={isAuthenticated} />} />
           <Route
             path="/dashboard"
