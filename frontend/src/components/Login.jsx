@@ -2,16 +2,27 @@ import { useState, useEffect } from "react";
 import { useNavigate, Link } from "react-router-dom";
 import api from "../services/api";
 import PCCPModal from "./PCCPModal";
+import { 
+  TextField, 
+  Button, 
+  Paper, 
+  Typography, 
+  Container,
+  Box,
+  Alert
+} from '@mui/material';
 
-function Login({ setIsAuthenticated }) {
+function Login({ setIsAuthenticated, setLoading, isAuthenticated }) {
   const navigate = useNavigate();
   const [user_email, setUser_email] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
-  const [loading, setLoading] = useState(false);
   const [pccpImage, setPccpImage] = useState("");
   const [coordinates, setCoordinates] = useState([]);
   const [showPCCPModal, setShowPCCPModal] = useState(false);
+  const [formErrors, setFormErrors] = useState({});
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [localLoading, setLocalLoading] = useState(false);  // Add this line
 
   useEffect(() => {
     console.log("Updated coordinates:", coordinates);
@@ -19,6 +30,7 @@ function Login({ setIsAuthenticated }) {
 
   const handleSetPCCP = async () => {
     setLoading(true);
+    setLocalLoading(true);  // Add this line
     try {
       const response = await api.getPCCPImageForLogin(user_email);
       if (response.data && response.data.image_url) {
@@ -32,6 +44,7 @@ function Login({ setIsAuthenticated }) {
       console.error(error);
     }
     setLoading(false);
+    setLocalLoading(false);  // Add this line
   };
 
   const handlePCCPSelection = (selectedCoordinates) => {
@@ -45,29 +58,24 @@ function Login({ setIsAuthenticated }) {
     }
   }, [coordinates]);
 
-  
   const handleLogin = async () => {
+    setLoading(true);
     const payload = {
       user_email: user_email,
       password: password,
       coordinates: [...coordinates],
     };
 
-    
     console.log("Login payload:", payload);
 
     try {
-      console.log("entered the try block");
       const response = await api.login(user_email, password, coordinates);
-      console.log("await done");
       if (response.data && response.data.token) {
-        console.log("Login successful:", response.data.token);
         localStorage.setItem("token", response.data.token);
-        console.log("setIsAuthenticated", setIsAuthenticated);
+        localStorage.setItem("userEmail", user_email);  // <--- Added to persist current user email
         setIsAuthenticated(true);
         navigate("/dashboard");
       } else {
-        console.log("Login failed:", response.data);
         setError(response.data.message || "Login failed.");
       }
     } catch (error) {
@@ -77,79 +85,120 @@ function Login({ setIsAuthenticated }) {
     setLoading(false);
   };
 
+  const validateForm = () => {
+    const errors = {};
+    if (!user_email) {
+      errors.email = "Email is required";
+    } else if (!/\S+@\S+\.\S+/.test(user_email)) {
+      errors.email = "Email address is invalid";
+    }
+    if (!password) {
+      errors.password = "Password is required";
+    } else if (password.length < 6) {
+      errors.password = "Password must be at least 6 characters";
+    }
+    return errors;
+  };
+
   const handleSubmit = async (e) => {
     e.preventDefault();
-    handleSetPCCP();
+    setIsSubmitting(true);
+    const errors = validateForm();
+    
+    if (Object.keys(errors).length > 0) {
+      setFormErrors(errors);
+      setIsSubmitting(false);
+      return;
+    }
+    
+    try {
+      await handleSetPCCP();
+    } catch (error) {
+      setError("Authentication failed. Please try again.");
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-indigo-900 to-purple-800 flex items-center justify-center">
-      <div className="bg-white p-8 rounded-lg shadow-2xl w-full max-w-md">
-        <h2 className="text-3xl font-semibold text-center mb-6 text-gray-800">
-          Sign In
-        </h2>
-        <form onSubmit={handleSubmit}>
+    <Container component="main" maxWidth="xs">
+      <Box
+        sx={{
+          marginTop: 8,
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'center',
+        }}
+      >
+        <Paper elevation={6} sx={{ p: 4, width: '100%' }}>
+          <Typography component="h1" variant="h5" align="center" gutterBottom>
+            Sign In
+          </Typography>
+
           {error && (
-            <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded mb-4">
+            <Alert severity="error" sx={{ mb: 2 }}>
               {error}
-            </div>
+            </Alert>
           )}
 
-          <div className="mb-4">
-            <label
-              className="block text-gray-700 text-sm font-bold mb-2"
-              htmlFor="user_email"
-            >
-              Email
-            </label>
-            <input
-              className="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline"
+          <form onSubmit={handleSubmit}>
+            <TextField
+              margin="normal"
+              required
+              fullWidth
               id="user_email"
-              type="email"
-              placeholder="Email"
+              label="Email Address"
+              name="email"
+              autoComplete="email"
+              autoFocus
               value={user_email}
               onChange={(e) => setUser_email(e.target.value)}
-              required
+              error={!!formErrors.email}
+              helperText={formErrors.email}
             />
-          </div>
 
-          <div className="mb-6">
-            <label
-              className="block text-gray-700 text-sm font-bold mb-2"
-              htmlFor="password"
-            >
-              Password
-            </label>
-            <input
-              className="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline"
-              id="password"
+            <TextField
+              margin="normal"
+              required
+              fullWidth
+              name="password"
+              label="Password"
               type="password"
-              placeholder="****"
+              id="password"
+              autoComplete="current-password"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
-              required
+              error={!!formErrors.password}
+              helperText={formErrors.password}
             />
-          </div>
 
-          <div className="flex items-center justify-between">
-            <button
-              className={`bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded focus:outline-none focus:shadow-outline ${
-                loading ? "opacity-50 cursor-not-allowed" : ""
-              }`}
-              type="submit"
-              disabled={loading}
-            >
-              {loading ? "Loading..." : "Sign In"}
-            </button>
-            <Link
-              to="/register"
-              className="inline-block align-baseline font-bold text-sm text-blue-500 hover:text-blue-800"
-            >
-              Create Account
-            </Link>
-          </div>
-        </form>
-      </div>
+            <Box sx={{ mt: 3, mb: 2, display: 'flex', justifyContent: 'space-between' }}>
+              <Button
+                type="submit"
+                variant="contained"
+                disabled={localLoading}
+                sx={{ width: '45%' }}
+              >
+                {localLoading ? "Loading..." : "Sign In"} 
+              </Button>
+              
+              <Button
+                component={Link}
+                to="/register"
+                variant="outlined"
+                sx={{ width: '45%' }}
+                onClick={() => {
+                  setIsAuthenticated(false);
+                  localStorage.removeItem('token');
+                }}
+              >
+                Create Account
+              </Button>
+            </Box>
+          </form>
+        </Paper>
+      </Box>
+
       {showPCCPModal && (
         <PCCPModal
           imageUrl={pccpImage}
@@ -157,7 +206,7 @@ function Login({ setIsAuthenticated }) {
           onClose={() => setShowPCCPModal(false)}
         />
       )}
-    </div>
+    </Container>
   );
 }
 

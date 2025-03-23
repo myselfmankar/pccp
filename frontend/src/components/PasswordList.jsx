@@ -1,12 +1,39 @@
 import { useState } from 'react';
+import {
+  Grid,
+  Typography,
+  Snackbar,
+  Alert,
+  Box,
+  CircularProgress,
+} from '@mui/material';
+import PasswordCard from './PasswordCard';
 import PCCPVerificationModal from './PCCPVerificationModal';
 import api from '../services/api';
 
-function PasswordList({ passwords, onGetPassword }) {
+function PasswordList({ passwords, onGetPassword, onDeletePassword, loading }) {
   const [revealedPasswords, setRevealedPasswords] = useState({});
   const [verificationModalData, setVerificationModalData] = useState(null);
   const [verifyingId, setVerifyingId] = useState(null);
   const [error, setError] = useState('');
+  const [snackbar, setSnackbar] = useState({ open: false, message: '', severity: 'success' });
+
+  const handleCopyPassword = async (password) => {
+    try {
+      await navigator.clipboard.writeText(password);
+      setSnackbar({
+        open: true,
+        message: 'Password copied to clipboard!',
+        severity: 'success'
+      });
+    } catch (err) {
+      setSnackbar({
+        open: true,
+        message: 'Failed to copy password',
+        severity: 'error'
+      });
+    }
+  };
 
   const startPasswordReveal = async (id) => {
     try {
@@ -33,7 +60,7 @@ function PasswordList({ passwords, onGetPassword }) {
         setVerificationModalData({
           password: response.data.password,
           imageUrl: response.data.master_image_url,
-          expectedCoordinates: JSON.parse(response.data.master_coordinates)
+          expectedCoordinates: response.data.master_coordinates // No need to parse
         });
       } else {
         // Handle error cases
@@ -68,73 +95,45 @@ function PasswordList({ passwords, onGetPassword }) {
     setVerifyingId(null);
   };
 
+  if (loading) {
+    return (
+      <Box sx={{ display: 'flex', justifyContent: 'center', p: 3 }}>
+        <CircularProgress />
+      </Box>
+    );
+  }
+
+  if (passwords.length === 0) {
+    return (
+      <Box sx={{ textAlign: 'center', p: 3 }}>
+        <Typography color="textSecondary">
+          No passwords stored yet. Add your first password using the button above.
+        </Typography>
+      </Box>
+    );
+  }
+
   return (
     <>
       {error && (
-        <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded mb-4">
+        <Alert severity="error" sx={{ mb: 2 }} onClose={() => setError('')}>
           {error}
-          <button 
-            className="float-right" 
-            onClick={() => setError('')}
-          >
-            &times;
-          </button>
-        </div>
+        </Alert>
       )}
-      
-      <div className="bg-white shadow-md rounded-lg overflow-hidden">
-        <table className="min-w-full bg-white">
-          <thead>
-            <tr className="bg-gray-100 text-gray-600 uppercase text-sm leading-normal">
-              <th className="py-3 px-6 text-left">Website</th>
-              <th className="py-3 px-6 text-left">Username</th>
-              <th className="py-3 px-6 text-left">Password</th>
-              <th className="py-3 px-6 text-center">Actions</th>
-            </tr>
-          </thead>
-          <tbody className="text-gray-600 text-sm">
-            {passwords.length === 0 ? (
-              <tr>
-                <td colSpan="4" className="py-4 px-6 text-center">
-                  No passwords stored yet.
-                </td>
-              </tr>
-            ) : (
-              passwords.map((item) => (
-                <tr key={item.id} className="border-b border-gray-200 hover:bg-gray-50">
-                  <td className="py-3 px-6 text-left">
-                    <a href={item.site_url} target="_blank" rel="noopener noreferrer" className="text-blue-500 hover:underline">
-                      {item.site_url}
-                    </a>
-                  </td>
-                  <td className="py-3 px-6 text-left">{item.username}</td>
-                  <td className="py-3 px-6 text-left font-mono">
-                    {revealedPasswords[item.id] || item.password}
-                  </td>
-                  <td className="py-3 px-6 text-center">
-                    <button
-                      onClick={() => startPasswordReveal(item.id)}
-                      className={`${
-                        verifyingId === item.id
-                          ? 'bg-gray-400 cursor-wait'
-                          : 'bg-gray-200 hover:bg-gray-300'
-                      } text-gray-800 font-bold py-1 px-2 rounded text-xs`}
-                      disabled={verifyingId === item.id}
-                    >
-                      {verifyingId === item.id 
-                        ? 'Loading...' 
-                        : revealedPasswords[item.id] 
-                          ? 'Hide' 
-                          : 'Reveal'
-                      }
-                    </button>
-                  </td>
-                </tr>
-              ))
-            )}
-          </tbody>
-        </table>
-      </div>
+
+      <Grid container spacing={3}>
+        {passwords.map((item) => (
+          <Grid item xs={12} sm={6} md={4} key={item.id}>
+            <PasswordCard
+              item={item}
+              onReveal={startPasswordReveal}
+              onDelete={onDeletePassword}
+              onCopy={handleCopyPassword}
+              revealed={revealedPasswords[item.id]}
+            />
+          </Grid>
+        ))}
+      </Grid>
 
       {verificationModalData && (
         <PCCPVerificationModal
@@ -144,6 +143,16 @@ function PasswordList({ passwords, onGetPassword }) {
           onClose={handleCloseModal}
         />
       )}
+
+      <Snackbar
+        open={snackbar.open}
+        autoHideDuration={3000}
+        onClose={() => setSnackbar({ ...snackbar, open: false })}
+      >
+        <Alert severity={snackbar.severity} sx={{ width: '100%' }}>
+          {snackbar.message}
+        </Alert>
+      </Snackbar>
     </>
   );
 }

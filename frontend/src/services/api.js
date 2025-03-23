@@ -32,12 +32,17 @@ const api = {
         }
     },
 
-    storePassword: async (user_name, site_url, password) => {
+    storePassword: async (user_email, site_url, username, password) => {
         try {
             const response = await axios.post(`${API_URL}/store_pccp`, {
-                user_name,
+                user_email,
                 site_url,
+                username,
                 password,
+            }, {
+                headers: {
+                    'Authorization': `Bearer ${localStorage.getItem('token')}`
+                }
             });
             return response;
         } catch (error) {
@@ -46,9 +51,24 @@ const api = {
         }
     },
 
-    getPassword: async (user_name, site_url) => {
+    getPasswords: async (user_email) => {
         try {
-            const response = await axios.get(`${API_URL}/get_password?user_name=${encodeURIComponent(user_name)}&site_url=${encodeURIComponent(site_url)}`);
+            const response = await axios.get(`${API_URL}/get_passwords`, {
+                headers: {
+                    'Authorization': `Bearer ${localStorage.getItem('token')}`
+                },
+                params: { user_email }
+            });
+            return response;
+        } catch (error) {
+            console.error('API error:', error);
+            throw error;
+        }
+    },
+
+    getPassword: async (user_email, site_url) => {
+        try {
+            const response = await axios.get(`${API_URL}/get_password?user_email=${encodeURIComponent(user_email)}&site_url=${encodeURIComponent(site_url)}`);
             return response;
         } catch (error) {
             console.error('API error:', error);

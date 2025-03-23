@@ -1,94 +1,149 @@
 import { useState } from 'react';
+import {
+  Dialog,
+  DialogTitle,
+  DialogContent,
+  DialogActions,
+  TextField,
+  Button,
+  Alert,
+  InputAdornment,
+  IconButton,
+  Box,
+  LinearProgress,
+  Typography,
+} from '@mui/material';
+import { Visibility, VisibilityOff, CheckCircle, Cancel } from '@mui/icons-material';
 
-function AddPasswordModal({ onClose, onAddPassword }) {
-  const [site_url, setSiteUrl] = useState('');
-  const [username, setUsername] = useState('');
-  const [password, setPassword] = useState('');
+function AddPasswordModal({ open, onClose, onAddPassword }) {
+  const [formData, setFormData] = useState({
+    site_url: '',
+    username: '',
+    password: '',
+    showPassword: false
+  });
   const [error, setError] = useState('');
+
+  const handleChange = (prop) => (event) => {
+    setFormData({ ...formData, [prop]: event.target.value });
+    setError('');
+  };
+
+  const togglePasswordVisibility = () => {
+    setFormData({ ...formData, showPassword: !formData.showPassword });
+  };
 
   const handleSubmit = (e) => {
     e.preventDefault();
-    setError('');
-
-    if (!site_url || !username || !password) {
+    if (!formData.site_url || !formData.username || !formData.password) {
       setError('All fields are required');
       return;
     }
 
-    onAddPassword({ site_url, username, password });
+    onAddPassword({
+      site_url: formData.site_url,
+      username: formData.username,
+      password: formData.password
+    });
+
+    setFormData({
+      site_url: '',
+      username: '',
+      password: '',
+      showPassword: false
+    });
+  };
+
+  const validatePassword = (password) => {
+    const checks = {
+      length: password.length >= 8,
+      uppercase: /[A-Z]/.test(password),
+      lowercase: /[a-z]/.test(password),
+      number: /[0-9]/.test(password),
+      special: /[!@#$%^&*]/.test(password),
+    };
+    return checks;
+  };
+
+  const getPasswordStrength = (password) => {
+    const checks = validatePassword(password);
+    const strength = Object.values(checks).filter(Boolean).length;
+    return (strength / 5) * 100;
   };
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-      <div className="bg-white p-8 rounded-lg shadow-lg w-96">
-        <h2 className="text-xl font-bold mb-4">Add New Password</h2>
-        
-        {error && <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded mb-4">{error}</div>}
-        
-        <form onSubmit={handleSubmit}>
-          <div className="mb-4">
-            <label className="block text-gray-700 text-sm font-bold mb-2" htmlFor="site_url">
-              Website URL
-            </label>
-            <input
-              className="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline"
-              id="site_url"
-              type="url"
-              placeholder="https://example.com"
-              value={site_url}
-              onChange={(e) => setSiteUrl(e.target.value)}
-              required
-            />
-          </div>
+    <Dialog open={open} onClose={onClose} maxWidth="sm" fullWidth>
+      <DialogTitle>Add New Password</DialogTitle>
+      <form onSubmit={handleSubmit}>
+        <DialogContent>
+          {error && <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert>}
           
-          <div className="mb-4">
-            <label className="block text-gray-700 text-sm font-bold mb-2" htmlFor="username">
-              Username
-            </label>
-            <input
-              className="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline"
-              id="username"
-              type="text"
-              placeholder="Username"
-              value={username}
-              onChange={(e) => setUsername(e.target.value)}
-              required
-            />
-          </div>
+          <TextField
+            margin="dense"
+            label="Website URL"
+            type="url"
+            fullWidth
+            required
+            value={formData.site_url}
+            onChange={handleChange('site_url')}
+          />
           
-          <div className="mb-6">
-            <label className="block text-gray-700 text-sm font-bold mb-2" htmlFor="password">
-              Password
-            </label>
-            <input
-              className="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline"
-              id="password"
-              type="password"
-              placeholder="******************"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              required
-            />
-          </div>
+          <TextField
+            margin="dense"
+            label="Username"
+            type="text"
+            fullWidth
+            required
+            value={formData.username}
+            onChange={handleChange('username')}
+          />
           
-          <div className="flex items-center justify-between">
-            <button
-              className="bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded focus:outline-none focus:shadow-outline"
-              type="submit"
-            >
-              Save
-            </button>
-            <button
-              className="bg-gray-300 hover:bg-gray-400 text-gray-800 font-bold py-2 px-4 rounded focus:outline-none focus:shadow-outline"
-              type="button"
-              onClick={onClose}
-            >
-              Cancel
-            </button>
-          </div>
-        </form>
-      </div>
-    </div>
+          <Box sx={{ mb: 2 }}>
+            <TextField
+              margin="dense"
+              label="Password"
+              type={formData.showPassword ? 'text' : 'password'}
+              fullWidth
+              required
+              value={formData.password}
+              onChange={handleChange('password')}
+              error={!!error && error.includes('password')}
+            />
+            <LinearProgress 
+              variant="determinate" 
+              value={getPasswordStrength(formData.password)}
+              sx={{ mt: 1, mb: 1 }}
+            />
+            <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 1 }}>
+              {Object.entries(validatePassword(formData.password)).map(([check, passes]) => (
+                <Box key={check} sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                  {passes ? (
+                    <CheckCircle color="success" fontSize="small" />
+                  ) : (
+                    <Cancel color="error" fontSize="small" />
+                  )}
+                  <Typography variant="body2">
+                    {check.charAt(0).toUpperCase() + check.slice(1)}
+                  </Typography>
+                </Box>
+              ))}
+            </Box>
+          </Box>
+        </DialogContent>
+
+        <DialogActions>
+          <Button onClick={onClose}>Cancel</Button>
+          <Button 
+            type="submit" 
+            variant="contained" 
+            color="primary"
+            disabled={getPasswordStrength(formData.password) < 60}
+          >
+            Save
+          </Button>
+        </DialogActions>
+      </form>
+    </Dialog>
   );
 }
 

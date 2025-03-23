@@ -11,9 +11,18 @@ from flask_jwt_extended import JWTManager, create_access_token, jwt_required, ge
 from datetime import datetime, timedelta, timezone
 from werkzeug.security import generate_password_hash, check_password_hash 
 import bcrypt 
+import logging
+from flask_limiter import Limiter
+from flask_limiter.util import get_remote_address
+from boto3.dynamodb.conditions import Key
 
 app = Flask(__name__)
 CORS(app)
+limiter = Limiter(get_remote_address, app=app, default_limits=["200 per day", "50 per hour"])
+
+# Configure logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 dynamodb = boto3.resource(
     'dynamodb',
@@ -31,17 +40,18 @@ app.config['JWT_SECRET_KEY'] = Config.JWT_SECRET_KEY
 jwt = JWTManager(app)
 
 def encrypt(data):
-    print(f"Encrypting key: {fernet}")
+    logger.info(f"Encrypting data")
     return fernet.encrypt(data.encode()).decode()
 
 def decrypt(data):
-    print(f"Decrypting key: {fernet}")
+    logger.info(f"Decrypting data")
     return fernet.decrypt(data.encode()).decode()
 
 def hash_password(password):
     return bcrypt.hashpw(password.encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
- 
+
 @app.route('/register', methods=['POST'])
+@limiter.limit("5 per minute")
 def register():
     data = request.get_json()
     user_email = data.get('user_email')
@@ -65,10 +75,11 @@ def register():
     except boto3.exceptions.ConditionalCheckFailedException:
         return jsonify({'message': 'User already exists'}), 400
     except Exception as e:
-        print(f"Error during PutItem: {e}")
+        logger.error(f"Error during PutItem: {e}")
         return jsonify({'error': str(e)}), 500
 
 @app.route('/get_registration_image', methods=['GET'])
+@limiter.limit("10 per minute")
 def get_registration_image():
     try:
         response = users_table.scan()
@@ -79,9 +90,11 @@ def get_registration_image():
         else:
             return jsonify({'error': 'No users found'}), 404
     except Exception as e:
+        logger.error(f"Error fetching registration image: {e}")
         return jsonify({'error': str(e)}), 500
 
 @app.route('/get_pccp_image', methods=['GET'])
+@limiter.limit("10 per minute")
 def get_pccp_image():
     headers = {"Authorization": f"Client-ID {Config.UNSPLASH_ACCESS_KEY}"}
     query = random.choice(SIMPLE_IMAGE_QUERIES)
@@ -94,12 +107,13 @@ def get_pccp_image():
         return jsonify({'error': 'Failed to fetch image from Unsplash'}), 500
 
 @app.route('/login', methods=['POST'])
+@limiter.limit("5 per minute")
 def login():
     data = request.get_json()
     user_email = data.get('user_email')
     password = data.get('password')
     coordinates = data.get('coordinates')
-    print(password)
+    logger.info(f"Login attempt for user: {user_email}")
     try:
         response = users_table.get_item(Key={'user_email': user_email})
         user = response.get('Item')
@@ -129,44 +143,44 @@ def login():
         else:
             return jsonify({'message': 'Invalid email or password'}), 401
     except Exception as e:
-        print(f"Login error: {e}")
+        logger.error(f"Login error: {e}")
         return jsonify({'error': 'Login failed'}), 500
 
 @app.route('/store_pccp', methods=['POST'])
+@limiter.limit("5 per minute")
 def store_pccp():
     data = request.get_json()
-    user_name = data.get('user_name')
+    user_email = data.get('user_email')  # use user_email as the partition key
     site_url = data.get('site_url')
     encrypted_password = encrypt(data.get('password'))
-
     try:
         passwords_table.put_item(
             Item={
-                'user_name': user_name,
+                'user_email': user_email,   # updated key
                 'site_url': site_url,
+                'username': data.get('username'),  # still store username if provided
                 'password': encrypted_password,
             }
         )
         return jsonify({'message': 'PCCP data stored successfully'}), 201
     except Exception as e:
+        logger.error(f"Error storing PCCP data: {e}")
         return jsonify({'error': str(e)}), 500
 
 @app.route('/get_password', methods=['GET'])
+@limiter.limit("10 per minute")
 def get_password():
-    user_name = request.args.get('user_name')
+    user_email = request.args.get('user_email')  # updated parameter name
     site_url = request.args.get('site_url')
-
     try:
-        response = passwords_table.get_item(Key={'user_name': user_name, 'site_url': site_url})
+        response = passwords_table.get_item(Key={'user_email': user_email, 'site_url': site_url})
         if 'Item' in response:
             item = response['Item']
             decrypted_password = decrypt(item['password'])
-
-            user_response = users_table.get_item(Key={'user_name': user_name})
+            user_response = users_table.get_item(Key={'user_email': user_email})  # updated key
             if 'Item' in user_response:
                 master_image_url = user_response['Item']['master_image_url']
                 master_coordinates = json.loads(decrypt(user_response['Item']['master_coordinates']))
-
                 return jsonify({
                     'password': decrypted_password,
                     'master_image_url': master_image_url,
@@ -177,9 +191,29 @@ def get_password():
         else:
             return jsonify({'message': 'Password not found'}), 404
     except Exception as e:
+        logger.error(f"Error fetching password: {e}")
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/get_passwords', methods=['GET'])
+@jwt_required()
+@limiter.limit("10 per minute")
+def get_passwords():
+    user_email = request.args.get('user_email')
+    try:
+        response = passwords_table.query(
+            KeyConditionExpression=Key('user_email').eq(user_email)
+        )
+        items = response.get('Items', [])
+        return jsonify(items), 200
+    except Exception as e:
+        # If table or resource not found, return empty list
+        if hasattr(e, 'response') and e.response.get('Error', {}).get('Code') == 'ResourceNotFoundException':
+            return jsonify([]), 200
+        logger.error(f"Error querying passwords table: {e}")
         return jsonify({'error': str(e)}), 500
 
 @app.route('/get_pccp_login', methods=['POST'])
+@limiter.limit("5 per minute")
 def get_pccp_login():
     data = request.get_json()
     user_email = data.get('user_email')
@@ -192,6 +226,7 @@ def get_pccp_login():
         else:
             return jsonify({'error': 'Image not found'}), 404
     except Exception as e:
+        logger.error(f"Error fetching PCCP login image: {e}")
         return jsonify({'error': str(e)}), 500
 
 if __name__ == '__main__':

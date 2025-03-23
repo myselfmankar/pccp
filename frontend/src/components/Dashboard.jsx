@@ -3,6 +3,22 @@ import { useNavigate } from 'react-router-dom';
 import PasswordList from './PasswordList';
 import AddPasswordModal from './AddPasswordModal';
 import api from '../services/api';
+import {
+  CircularProgress,
+  Container,
+  Typography,
+  Button,
+  Box,
+  Alert,
+  AppBar,
+  Toolbar,
+  Avatar,
+  Divider,
+  IconButton,
+  Paper,
+  Grid,
+} from '@mui/material';
+import { Add as AddIcon, Logout as LogoutIcon } from '@mui/icons-material';
 
 function Dashboard({ onLogout }) {
   const navigate = useNavigate();
@@ -13,19 +29,23 @@ function Dashboard({ onLogout }) {
   const userEmail = localStorage.getItem('userEmail');
 
   useEffect(() => {
-    // In a real app, you'd fetch the passwords from the backend
-    // For demo purposes, we'll use mock data
-    setPasswords([
-      { id: 1, site_url: 'https://example.com', username: 'user1', password: '••••••••' },
-      { id: 2, site_url: 'https://github.com', username: 'user2', password: '••••••••' },
-    ]);
-    setLoading(false);
-  }, []);
+    const fetchPasswords = async () => {
+      try {
+        const response = await api.getPasswords(userEmail);
+        setPasswords(response.data);
+      } catch (error) {
+        setError('Failed to fetch passwords');
+        console.error(error);
+      }
+      setLoading(false);
+    };
+
+    fetchPasswords();
+  }, [userEmail]);
 
   const handleAddPassword = async (newPassword) => {
     try {
-      // In a real app, you'd call the API to store the password
-      // For demo purposes, we'll just update the state
+      await api.storePassword(userEmail, newPassword.site_url, newPassword.username, newPassword.password);
       setPasswords([...passwords, { 
         id: passwords.length + 1, 
         site_url: newPassword.site_url, 
@@ -39,56 +59,80 @@ function Dashboard({ onLogout }) {
     }
   };
 
-  const handleGetPassword = async (id) => {
-    // In a real app, you'd call the API to get the decrypted password
-    // For demo purposes, we'll just return a mock password
-    return 'password123';
-  };
-
   const handleLogout = () => {
     onLogout();
     navigate('/login');
   };
 
   if (loading) {
-    return <div className="flex justify-center items-center h-screen">Loading...</div>;
+    return (
+      <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100vh' }}>
+        <CircularProgress />
+      </Box>
+    );
   }
 
   return (
-    <div className="container mx-auto p-4">
-      <div className="flex justify-between items-center mb-6">
-        <h1 className="text-2xl font-bold">PCCP Password Manager</h1>
-        <div>
-          <span className="mr-4">{userEmail}</span>
-          <button
-            onClick={handleLogout}
-            className="bg-red-500 hover:bg-red-700 text-white font-bold py-2 px-4 rounded"
-          >
-            Logout
-          </button>
-        </div>
-      </div>
+    <Box sx={{ flexGrow: 1 }}>
+      <AppBar position="fixed">
+        <Toolbar>
+          <Typography variant="h6" component="div" sx={{ flexGrow: 1 }}>
+            PCCP Password Manager
+          </Typography>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+            <Avatar sx={{ bgcolor: 'secondary.main' }}>
+              {userEmail?.charAt(0).toUpperCase()}
+            </Avatar>
+            <Typography variant="body2">{userEmail}</Typography>
+            <IconButton color="inherit" onClick={handleLogout}>
+              <LogoutIcon />
+            </IconButton>
+          </Box>
+        </Toolbar>
+      </AppBar>
+      <Toolbar /> {/* Spacer for fixed AppBar */}
+      
+      <Container maxWidth="lg" sx={{ mt: 4, mb: 4 }}>
+        {error && (
+          <Alert severity="error" sx={{ mb: 3 }} onClose={() => setError('')}>
+            {error}
+          </Alert>
+        )}
 
-      {error && <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded mb-4">{error}</div>}
+        <Grid container spacing={3}>
+          <Grid item xs={12}>
+            <Paper sx={{ p: 3, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <Typography variant="h5">Your Passwords</Typography>
+              <Button
+                variant="contained"
+                startIcon={<AddIcon />}
+                onClick={() => setIsModalOpen(true)}
+              >
+                Add New Password
+              </Button>
+            </Paper>
+          </Grid>
 
-      <div className="mb-4">
-        <button
-          onClick={() => setIsModalOpen(true)}
-          className="bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded"
-        >
-          Add New Password
-        </button>
-      </div>
-
-      <PasswordList passwords={passwords} onGetPassword={handleGetPassword} />
+          <Grid item xs={12}>
+            <Paper sx={{ p: 3 }}>
+              <PasswordList 
+                passwords={passwords}
+                onGetPassword={api.getPassword}
+                loading={loading}
+              />
+            </Paper>
+          </Grid>
+        </Grid>
+      </Container>
 
       {isModalOpen && (
         <AddPasswordModal
+          open={isModalOpen}
           onClose={() => setIsModalOpen(false)}
           onAddPassword={handleAddPassword}
         />
       )}
-    </div>
+    </Box>
   );
 }
 

@@ -1,7 +1,7 @@
 from dotenv import load_dotenv
 import os, base64
 
-load_dotenv()  # Load environment variables from .env file
+load_dotenv()  
 
 class Config:
     AWS_ACCESS_KEY = os.getenv('AWS_ACCESS_KEY')

@@ -27,7 +27,6 @@ function PCCPModal({ imageUrl, onSelectionComplete, onClose }) {
         console.log("Coordinates state updated:", coordinates);
     }, [coordinates]);
 
-
     const drawPoints = () => {
         if (!canvasRef.current) return;
     
@@ -50,73 +49,72 @@ function PCCPModal({ imageUrl, onSelectionComplete, onClose }) {
     };
     
     const drawImageAndGrid = (ctx, canvas) => {
-    const gridSizeX = canvas.width * 0.2;
-    const gridSizeY = canvas.height * 0.2;
+        const gridSizeX = canvas.width * 0.2;
+        const gridSizeY = canvas.height * 0.2;
 
-    ctx.drawImage(drawPoints.img, 0, 0);
+        ctx.drawImage(drawPoints.img, 0, 0);
 
-    // Draw grid lines
-    ctx.strokeStyle = 'rgba(0, 0, 0, 1.0)';
-    ctx.lineWidth = 1;
+        // Draw grid lines
+        ctx.strokeStyle = 'rgba(0, 0, 0, 1.0)';
+        ctx.lineWidth = 1;
 
-    for (let x = 0; x < canvas.width; x += gridSizeX) {
-        ctx.beginPath();
-        ctx.moveTo(x, 0);
-        ctx.lineTo(x, canvas.height);
-        ctx.stroke();
-    }
+        for (let x = 0; x < canvas.width; x += gridSizeX) {
+            ctx.beginPath();
+            ctx.moveTo(x, 0);
+            ctx.lineTo(x, canvas.height);
+            ctx.stroke();
+        }
 
-    for (let y = 0; y < canvas.height; y += gridSizeY) {
-        ctx.beginPath();
-        ctx.moveTo(0, y);
-        ctx.lineTo(canvas.width, y);
-        ctx.stroke();
-    }
+        for (let y = 0; y < canvas.height; y += gridSizeY) {
+            ctx.beginPath();
+            ctx.moveTo(0, y);
+            ctx.lineTo(canvas.width, y);
+            ctx.stroke();
+        }
 
-    // Draw selected points at the CENTER of the grid cell, it's drawing on some wrong place
-    // coordinates.forEach(point => {
-    //     ctx.beginPath();
-    //     ctx.arc(
-    //         (point.x * gridSizeX) + (gridSizeX / 2),  // Center X
-    //         (point.y * gridSizeY) + (gridSizeY / 2),  // Center Y
-    //         5,  // Circle radius
-    //         0,
-    //         2 * Math.PI
-    //     );
-    //     ctx.fillStyle = 'red';
-    //     ctx.fill();
-    // });
-};
-    
-const handleCanvasClick = (e) => {
-    if (coordinates.length < 3 && canvasRef.current) {
-        const rect = canvasRef.current.getBoundingClientRect();
-        const x = e.clientX - rect.left;
-        const y = e.clientY - rect.top;
-
-        const gridSizeX = canvasRef.current.width * 0.2; // 20% of canvas width
-        const gridSizeY = canvasRef.current.height * 0.2; // 20% of canvas height
-
-        // Correct gridX and gridY calculation
-        const gridX = Math.floor(x / gridSizeX);
-        const gridY = Math.floor(y / gridSizeY);
-
-        console.log(`Grid cell selected: (${gridX}, ${gridY})`);
-
-        const newCoordinate = { x: gridX, y: gridY };
-
-        setCoordinates((prevCoordinates) => {
-            if (!prevCoordinates.some(coord => coord.x === newCoordinate.x && coord.y === newCoordinate.y)) {
-                return [...prevCoordinates, newCoordinate]; // Add new coordinate
-            } else {
-                setErrorMessage("Coordinate already selected."); // Show error if duplicate
-                return prevCoordinates; // Keep the same state (no changes)
-            }
+        // Draw selected points at the CENTER of the grid cell
+        coordinates.forEach(point => {
+            ctx.beginPath();
+            ctx.arc(
+                (point.x * gridSizeX) + (gridSizeX / 2),  // Center X
+                (point.y * gridSizeY) + (gridSizeY / 2),  // Center Y
+                5,  // Circle radius
+                0,
+                2 * Math.PI
+            );
+            ctx.fillStyle = 'red';
+            ctx.fill();
         });
-    }
-};
-
+    };
     
+    const handleCanvasClick = (e) => {
+        if (coordinates.length < 3 && canvasRef.current) {
+            const rect = canvasRef.current.getBoundingClientRect();
+            const x = e.clientX - rect.left;
+            const y = e.clientY - rect.top;
+
+            const gridSizeX = canvasRef.current.width * 0.2; // 20% of canvas width
+            const gridSizeY = canvasRef.current.height * 0.2; // 20% of canvas height
+
+            // Correct gridX and gridY calculation
+            const gridX = Math.floor(x / gridSizeX);
+            const gridY = Math.floor(y / gridSizeY);
+
+            console.log(`Grid cell selected: (${gridX}, ${gridY})`);
+
+            const newCoordinate = { x: gridX, y: gridY };
+
+            setCoordinates((prevCoordinates) => {
+                if (!prevCoordinates.some(coord => coord.x === newCoordinate.x && coord.y === newCoordinate.y)) {
+                    return [...prevCoordinates, newCoordinate]; // Add new coordinate
+                } else {
+                    setErrorMessage("Coordinate already selected."); // Show error if duplicate
+                    return prevCoordinates; // Keep the same state (no changes)
+                }
+            });
+        }
+    };
+
     const handleDone = () => {
         if (coordinates.length === 3) {
             setLoading(true);
