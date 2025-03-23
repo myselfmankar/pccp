@@ -19,16 +19,41 @@ import {
   ExpandLess,
   Launch,
 } from '@mui/icons-material';
+import api from '../services/api';
 
-function PasswordCard({ item, onReveal, onDelete, onCopy, revealed }) {
+function PasswordCard({ item, onDelete, revealed }) {
   const [expanded, setExpanded] = useState(false);
+  const [isPasswordVisible, setIsPasswordVisible] = useState(false);
+  const [password, setPassword] = useState(null);
   
-  const getDomainFromUrl = (url) => {
+  const handleRevealPassword = async () => {
+    if (isPasswordVisible) {
+      setIsPasswordVisible(false);
+      setPassword(null);
+      return;
+    }
+
     try {
-      const domain = new URL(url).hostname;
-      return domain.replace('www.', '');
-    } catch {
-      return url;
+      const userEmail = localStorage.getItem('userEmail');
+      const response = await api.getPassword(userEmail, item.site_url);
+      setPassword(response.data.password);
+      setIsPasswordVisible(true);
+    } catch (error) {
+      console.error('Failed to fetch password:', error);
+    }
+  };
+
+  const handleCopyPassword = async () => {
+    if (!password) {
+      try {
+        const userEmail = localStorage.getItem('userEmail');
+        const response = await api.getPassword(userEmail, item.site_url);
+        await navigator.clipboard.writeText(response.data.password);
+      } catch (error) {
+        console.error('Failed to copy password:', error);
+      }
+    } else {
+      await navigator.clipboard.writeText(password);
     }
   };
 
@@ -37,12 +62,12 @@ function PasswordCard({ item, onReveal, onDelete, onCopy, revealed }) {
       <CardContent>
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
           <Typography variant="h6" component="div">
-            {getDomainFromUrl(item.site_url)}
+            {item.site_url}
           </Typography>
           <Tooltip title="Visit site">
             <IconButton
               size="small"
-              href={item.site_url.startsWith('http') ? item.site_url : `https://${item.site_url}`}
+              href={`https://${item.site_url}`}
               target="_blank"
               rel="noopener noreferrer"
             >
@@ -57,12 +82,12 @@ function PasswordCard({ item, onReveal, onDelete, onCopy, revealed }) {
 
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
           <Typography variant="body2">
-            {revealed ? item.password : '••••••••'}
+            {isPasswordVisible ? password : '••••••••'}
           </Typography>
           <Chip
-            label={revealed ? 'Revealed' : 'Hidden'}
+            label={isPasswordVisible ? 'Revealed' : 'Hidden'}
             size="small"
-            color={revealed ? 'success' : 'default'}
+            color={isPasswordVisible ? 'success' : 'default'}
           />
         </Box>
 
@@ -71,18 +96,20 @@ function PasswordCard({ item, onReveal, onDelete, onCopy, revealed }) {
             <Typography variant="body2" color="textSecondary">
               Created: {new Date(item.created_at).toLocaleDateString()}
             </Typography>
-            <Typography variant="body2" color="textSecondary">
-              Last modified: {new Date(item.modified_at).toLocaleDateString()}
-            </Typography>
+            {item.modified_at && (
+              <Typography variant="body2" color="textSecondary">
+                Last modified: {new Date(item.modified_at).toLocaleDateString()}
+              </Typography>
+            )}
           </Box>
         </Collapse>
       </CardContent>
 
       <CardActions>
-        <IconButton onClick={() => onReveal(item.id)}>
-          {revealed ? <VisibilityOff /> : <Visibility />}
+        <IconButton onClick={handleRevealPassword}>
+          {isPasswordVisible ? <VisibilityOff /> : <Visibility />}
         </IconButton>
-        <IconButton onClick={() => onCopy(item.password)} disabled={!revealed}>
+        <IconButton onClick={handleCopyPassword}>
           <ContentCopy />
         </IconButton>
         <IconButton onClick={() => onDelete(item.id)} color="error">

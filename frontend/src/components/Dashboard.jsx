@@ -45,13 +45,19 @@ function Dashboard({ onLogout }) {
 
   const handleAddPassword = async (newPassword) => {
     try {
-      await api.storePassword(userEmail, newPassword.site_url, newPassword.username, newPassword.password);
-      setPasswords([...passwords, { 
-        id: passwords.length + 1, 
-        site_url: newPassword.site_url, 
-        username: newPassword.username, 
-        password: '••••••••' 
-      }]);
+      // Format the URL to remove protocol if present
+      let formattedUrl = newPassword.site_url.replace(/^(https?:\/\/)?(www\.)?/, '');
+      
+      await api.storePassword(
+        userEmail, 
+        formattedUrl, 
+        newPassword.username, 
+        newPassword.password
+      );
+      
+      // Refresh password list after adding new password
+      const response = await api.getPasswords(userEmail);
+      setPasswords(response.data);
       setIsModalOpen(false);
     } catch (error) {
       setError('Failed to add password');

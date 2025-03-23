@@ -68,7 +68,18 @@ const api = {
 
     getPassword: async (user_email, site_url) => {
         try {
-            const response = await axios.get(`${API_URL}/get_password?user_email=${encodeURIComponent(user_email)}&site_url=${encodeURIComponent(site_url)}`);
+            const response = await axios.get(
+                `${API_URL}/get_password`,
+                {
+                    headers: {
+                        'Authorization': `Bearer ${localStorage.getItem('token')}`
+                    },
+                    params: { 
+                        user_email,
+                        site_url: site_url.replace(/^(https?:\/\/)?(www\.)?/, '')
+                    }
+                }
+            );
             return response;
         } catch (error) {
             console.error('API error:', error);

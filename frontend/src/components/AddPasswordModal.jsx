@@ -25,7 +25,12 @@ function AddPasswordModal({ open, onClose, onAddPassword }) {
   const [error, setError] = useState('');
 
   const handleChange = (prop) => (event) => {
-    setFormData({ ...formData, [prop]: event.target.value });
+    let value = event.target.value;
+    if (prop === 'site_url') {
+      // Remove protocol and www if present
+      value = value.replace(/^(https?:\/\/)?(www\.)?/, '');
+    }
+    setFormData({ ...formData, [prop]: value });
     setError('');
   };
 
@@ -37,6 +42,13 @@ function AddPasswordModal({ open, onClose, onAddPassword }) {
     e.preventDefault();
     if (!formData.site_url || !formData.username || !formData.password) {
       setError('All fields are required');
+      return;
+    }
+
+    // Further URL validation if needed
+    const urlRegex = /^[a-zA-Z0-9][a-zA-Z0-9-]{1,61}[a-zA-Z0-9]\.[a-zA-Z]{2,}$/;
+    if (!urlRegex.test(formData.site_url)) {
+      setError('Please enter a valid domain (e.g., github.com)');
       return;
     }
 

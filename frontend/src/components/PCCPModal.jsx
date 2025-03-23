@@ -1,30 +1,41 @@
 // src/components/PCCPModal.jsx
 import { useState, useRef, useEffect } from 'react';
+import {
+  Dialog,
+  DialogTitle,
+  DialogContent,
+  DialogActions,
+  Button,
+  Box,
+  Alert,
+  CircularProgress,
+} from '@mui/material';
 
 function PCCPModal({ imageUrl, onSelectionComplete, onClose }) {
     const [coordinates, setCoordinates] = useState([]);
     const canvasRef = useRef(null);
     const [errorMessage, setErrorMessage] = useState('');
-    const [gridSize, setGridSize] = useState(0);
     const [loading, setLoading] = useState(false);
+    const [gridSizeX, setGridSizeX] = useState(0);
+    const [gridSizeY, setGridSizeY] = useState(0);
 
     useEffect(() => {
         const img = new Image();
         img.src = imageUrl;
         img.onload = () => {
-            const area = img.width * img.height;
-            const calculatedGridSize = Math.round(Math.sqrt(0.2 * area));
-            console.log("Calculated gridSize:", calculatedGridSize);
-            setGridSize(calculatedGridSize);
+            if (canvasRef.current) {
+                const canvas = canvasRef.current;
+                canvas.width = img.width;
+                canvas.height = img.height;
+                setGridSizeX(canvas.width * 0.2);
+                setGridSizeY(canvas.height * 0.2);
+                drawPoints();
+            }
         };
     }, [imageUrl]);
 
     useEffect(() => {
         drawPoints();
-    }, [coordinates, imageUrl, gridSize]);
-
-    useEffect(() => {
-        console.log("Coordinates state updated:", coordinates);
     }, [coordinates]);
 
     const drawPoints = () => {
@@ -34,129 +45,133 @@ function PCCPModal({ imageUrl, onSelectionComplete, onClose }) {
         const ctx = canvas.getContext('2d');
         ctx.clearRect(0, 0, canvas.width, canvas.height);
     
-        // Load the image once globally
-        if (!drawPoints.img) {
-            drawPoints.img = new Image();
-            drawPoints.img.src = imageUrl;
-            drawPoints.img.onload = () => {
-                canvas.width = drawPoints.img.width;
-                canvas.height = drawPoints.img.height;
-                drawImageAndGrid(ctx, canvas);
-            };
-        } else {
-            drawImageAndGrid(ctx, canvas);
-        }
-    };
-    
-    const drawImageAndGrid = (ctx, canvas) => {
-        const gridSizeX = canvas.width * 0.2;
-        const gridSizeY = canvas.height * 0.2;
+        // Draw image
+        const img = new Image();
+        img.src = imageUrl;
+        img.onload = () => {
+            ctx.drawImage(img, 0, 0);
 
-        ctx.drawImage(drawPoints.img, 0, 0);
+            // Draw grid
+            ctx.strokeStyle = 'rgba(255, 255, 255, 0.5)';
+            ctx.lineWidth = 1;
 
-        // Draw grid lines
-        ctx.strokeStyle = 'rgba(0, 0, 0, 1.0)';
-        ctx.lineWidth = 1;
+            for (let x = gridSizeX; x < canvas.width; x += gridSizeX) {
+                ctx.beginPath();
+                ctx.moveTo(x, 0);
+                ctx.lineTo(x, canvas.height);
+                ctx.stroke();
+            }
 
-        for (let x = 0; x < canvas.width; x += gridSizeX) {
-            ctx.beginPath();
-            ctx.moveTo(x, 0);
-            ctx.lineTo(x, canvas.height);
-            ctx.stroke();
-        }
+            for (let y = gridSizeY; y < canvas.height; y += gridSizeY) {
+                ctx.beginPath();
+                ctx.moveTo(0, y);
+                ctx.lineTo(canvas.width, y);
+                ctx.stroke();
+            }
 
-        for (let y = 0; y < canvas.height; y += gridSizeY) {
-            ctx.beginPath();
-            ctx.moveTo(0, y);
-            ctx.lineTo(canvas.width, y);
-            ctx.stroke();
-        }
-
-        // Draw selected points at the CENTER of the grid cell
-        coordinates.forEach(point => {
-            ctx.beginPath();
-            ctx.arc(
-                (point.x * gridSizeX) + (gridSizeX / 2),  // Center X
-                (point.y * gridSizeY) + (gridSizeY / 2),  // Center Y
-                5,  // Circle radius
-                0,
-                2 * Math.PI
-            );
-            ctx.fillStyle = 'red';
-            ctx.fill();
-        });
-    };
-    
-    const handleCanvasClick = (e) => {
-        if (coordinates.length < 3 && canvasRef.current) {
-            const rect = canvasRef.current.getBoundingClientRect();
-            const x = e.clientX - rect.left;
-            const y = e.clientY - rect.top;
-
-            const gridSizeX = canvasRef.current.width * 0.2; // 20% of canvas width
-            const gridSizeY = canvasRef.current.height * 0.2; // 20% of canvas height
-
-            // Correct gridX and gridY calculation
-            const gridX = Math.floor(x / gridSizeX);
-            const gridY = Math.floor(y / gridSizeY);
-
-            console.log(`Grid cell selected: (${gridX}, ${gridY})`);
-
-            const newCoordinate = { x: gridX, y: gridY };
-
-            setCoordinates((prevCoordinates) => {
-                if (!prevCoordinates.some(coord => coord.x === newCoordinate.x && coord.y === newCoordinate.y)) {
-                    return [...prevCoordinates, newCoordinate]; // Add new coordinate
-                } else {
-                    setErrorMessage("Coordinate already selected."); // Show error if duplicate
-                    return prevCoordinates; // Keep the same state (no changes)
-                }
+            // Draw selected points
+            coordinates.forEach(point => {
+                const centerX = (point.x * gridSizeX) + (gridSizeX / 2);
+                const centerY = (point.y * gridSizeY) + (gridSizeY / 2);
+                
+                ctx.beginPath();
+                ctx.arc(centerX, centerY, 5, 0, 2 * Math.PI);
+                ctx.fillStyle = 'red';
+                ctx.fill();
+                ctx.strokeStyle = 'white';
+                ctx.stroke();
             });
+        };
+    };
+
+    const handleCanvasClick = (e) => {
+        if (coordinates.length >= 3) return;
+
+        const rect = canvasRef.current.getBoundingClientRect();
+        const x = e.clientX - rect.left;
+        const y = e.clientY - rect.top;
+
+        const gridX = Math.floor(x / gridSizeX);
+        const gridY = Math.floor(y / gridSizeY);
+
+        const isDuplicate = coordinates.some(coord => 
+            coord.x === gridX && coord.y === gridY
+        );
+
+        if (!isDuplicate) {
+            setCoordinates(prev => [...prev, { x: gridX, y: gridY }]);
+            setErrorMessage('');
+        } else {
+            setErrorMessage('This grid point has already been selected.');
         }
     };
 
     const handleDone = () => {
         if (coordinates.length === 3) {
             setLoading(true);
-            setTimeout(() => {
-                onSelectionComplete(coordinates);
-                setLoading(false);
-            }, 100);
+            onSelectionComplete(coordinates);
+            setLoading(false);
         } else {
             setErrorMessage('Please select exactly 3 points.');
         }
-    };   
+    };
 
     return (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center">
-            <div className="bg-white p-8 rounded-lg shadow-md w-96">
-                <h2 className="text-2xl font-semibold mb-4">Select 3 PCCP Points</h2>
-                {errorMessage && <p className="text-red-500 mb-2">{errorMessage}</p>}
-                <div id="pccp-container">
+        <Dialog 
+            open={true} 
+            onClose={onClose}
+            maxWidth="md"
+            fullWidth
+            PaperProps={{
+                sx: { maxHeight: '90vh' }
+            }}
+        >
+            <DialogTitle>Select 3 PCCP Points</DialogTitle>
+            
+            <DialogContent>
+                {errorMessage && (
+                    <Alert severity="error" sx={{ mb: 2 }} onClose={() => setErrorMessage('')}>
+                        {errorMessage}
+                    </Alert>
+                )}
+                
+                <Box sx={{ 
+                    position: 'relative',
+                    width: '100%',
+                    '& canvas': {
+                        width: '100%',
+                        height: 'auto',
+                        cursor: 'crosshair'
+                    }
+                }}>
                     <canvas
                         ref={canvasRef}
                         onClick={handleCanvasClick}
-                        className="cursor-pointer max-w-full max-h-[500px] border border-gray-300 rounded"
-                        style={{ maxWidth: '100%', maxHeight: '500px' }}
                     />
-                </div>
-                <div className="flex justify-between mt-4">
-                    <button
-                        className="bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded focus:outline-none focus:shadow-outline"
-                        onClick={handleDone}
-                        disabled={coordinates.length !== 3}
-                    >
-                        Done
-                    </button>
-                    <button
-                        className="bg-gray-400 hover:bg-gray-500 text-white font-bold py-2 px-4 rounded focus:outline-none focus:shadow-outline"
-                        onClick={onClose}
-                    >
-                        Cancel
-                    </button>
-                </div>
-            </div>
-        </div>
+                </Box>
+
+                <Box sx={{ mt: 2, textAlign: 'center' }}>
+                    Selected points: {coordinates.length}/3
+                </Box>
+            </DialogContent>
+
+            <DialogActions>
+                <Button onClick={onClose}>Cancel</Button>
+                <Button 
+                    onClick={() => setCoordinates([])}
+                    disabled={coordinates.length === 0}
+                >
+                    Reset
+                </Button>
+                <Button
+                    onClick={handleDone}
+                    variant="contained"
+                    disabled={coordinates.length !== 3 || loading}
+                >
+                    {loading ? <CircularProgress size={24} /> : 'Confirm Points'}
+                </Button>
+            </DialogActions>
+        </Dialog>
     );
 }
 

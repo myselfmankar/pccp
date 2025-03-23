@@ -2,7 +2,6 @@ import random
 from flask import Flask, request, jsonify
 import boto3
 from cryptography.fernet import Fernet
-import hashlib, math
 import requests
 from config import Config
 from flask_cors import CORS
@@ -15,9 +14,10 @@ import logging
 from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
 from boto3.dynamodb.conditions import Key
+from botocore.exceptions import ClientError  # Import ClientError
 
 app = Flask(__name__)
-CORS(app)
+CORS(app, resources={r"/*": {"origins": "*"}})  # Allow requests from any origin
 limiter = Limiter(get_remote_address, app=app, default_limits=["200 per day", "50 per hour"])
 
 # Configure logging
@@ -72,8 +72,16 @@ def register():
             ConditionExpression='attribute_not_exists(user_email)'
         )
         return jsonify({'message': 'User registered successfully'}), 201
-    except boto3.exceptions.ConditionalCheckFailedException:
-        return jsonify({'message': 'User already exists'}), 400
+    except ClientError as e:
+        error_code = e.response['Error']['Code']
+        if error_code == 'ConditionalCheckFailedException':
+            return jsonify({'message': 'User already exists'}), 400
+        elif error_code == 'ResourceNotFoundException':
+            logger.error(f"Table not found: {e}")
+            return jsonify({'error': 'Required DynamoDB table not found. Please check your table configuration.'}), 500
+        else:
+            logger.error(f"Error during PutItem: {e}")
+            return jsonify({'error': str(e)}), 500
     except Exception as e:
         logger.error(f"Error during PutItem: {e}")
         return jsonify({'error': str(e)}), 500
@@ -92,6 +100,7 @@ def get_registration_image():
     except Exception as e:
         logger.error(f"Error fetching registration image: {e}")
         return jsonify({'error': str(e)}), 500
+
 
 @app.route('/get_pccp_image', methods=['GET'])
 @limiter.limit("10 per minute")
@@ -215,19 +224,33 @@ def get_passwords():
 @app.route('/get_pccp_login', methods=['POST'])
 @limiter.limit("5 per minute")
 def get_pccp_login():
-    data = request.get_json()
-    user_email = data.get('user_email')
-
     try:
-        response = users_table.get_item(Key={'user_email': user_email})
-        user = response.get('Item')
-        if user and 'master_image_url' in user:
-            return jsonify({'image_url': user['master_image_url']}), 200
-        else:
-            return jsonify({'error': 'Image not found'}), 404
+        data = request.get_json()
+        if not data or 'user_email' not in data:
+            return jsonify({'error': 'Missing user_email in request'}), 400
+            
+        user_email = data.get('user_email')
+        response = users_table.get_item(
+            Key={
+                'user_email': user_email
+            }
+        )
+        
+        if 'Item' in response:
+            master_image_url = response['Item'].get('master_image_url')
+            if master_image_url:
+                return jsonify({'image_url': master_image_url}), 200
+            return jsonify({'error': 'Image URL not found for user'}), 404
+        return jsonify({'error': 'User not found'}), 404
+        
+    except boto3.exceptions.ClientError as e:
+        error_code = e.response.get('Error', {}).get('Code')
+        error_message = e.response.get('Error', {}).get('Message')
+        logger.error(f"DynamoDB Error: {error_code} - {error_message}")
+        return jsonify({'error': f'Database error: {error_message}'}), 500
     except Exception as e:
-        logger.error(f"Error fetching PCCP login image: {e}")
-        return jsonify({'error': str(e)}), 500
+        logger.error(f"Error fetching PCCP login image: {str(e)}")
+        return jsonify({'error': 'Internal server error'}), 500
 
 if __name__ == '__main__':
     app.run(debug=True)
