@@ -17,7 +17,7 @@ import { Visibility, VisibilityOff, CheckCircle, Cancel } from '@mui/icons-mater
 
 function AddPasswordModal({ open, onClose, onAddPassword }) {
   const [formData, setFormData] = useState({
-    site_url: '',
+    site_url: 'https://',
     username: '',
     password: '',
     showPassword: false
@@ -26,11 +26,13 @@ function AddPasswordModal({ open, onClose, onAddPassword }) {
 
   const handleChange = (prop) => (event) => {
     let value = event.target.value;
+    
     if (prop === 'site_url') {
-      // Remove protocol and www if present
-      value = value.replace(/^(https?:\/\/)?(www\.)?/, '');
+      // Remove only when user finishes typing (in handleSubmit)
+      setFormData({ ...formData, [prop]: value });
+    } else {
+      setFormData({ ...formData, [prop]: value });
     }
-    setFormData({ ...formData, [prop]: value });
     setError('');
   };
 
@@ -45,21 +47,27 @@ function AddPasswordModal({ open, onClose, onAddPassword }) {
       return;
     }
 
-    // Further URL validation if needed
-    const urlRegex = /^[a-zA-Z0-9][a-zA-Z0-9-]{1,61}[a-zA-Z0-9]\.[a-zA-Z]{2,}$/;
-    if (!urlRegex.test(formData.site_url)) {
+    // Clean and validate URL
+    let cleanedUrl = formData.site_url
+      .toLowerCase()
+      .replace(/^(https?:\/\/)?(www\.)?/, '')
+      .trim();
+
+    // Basic domain validation
+    const urlRegex = /^([a-zA-Z0-9-]+\.)+[a-zA-Z]{2,}$/;
+    if (!urlRegex.test(cleanedUrl)) {
       setError('Please enter a valid domain (e.g., github.com)');
       return;
     }
 
     onAddPassword({
-      site_url: formData.site_url,
+      site_url: `https://${cleanedUrl}`,
       username: formData.username,
       password: formData.password
     });
 
     setFormData({
-      site_url: '',
+      site_url: 'https://',
       username: '',
       password: '',
       showPassword: false
@@ -93,7 +101,7 @@ function AddPasswordModal({ open, onClose, onAddPassword }) {
           <TextField
             margin="dense"
             label="Website URL"
-            type="url"
+            type="text" // Changed from "url" to "text"
             fullWidth
             required
             value={formData.site_url}

@@ -33,6 +33,7 @@ function Login({ setIsAuthenticated, setLoading, isAuthenticated }) {
     setLocalLoading(true);  // Add this line
     try {
       const response = await api.getPCCPImageForLogin(user_email);
+      console.log('Login: PCCP image URL fetched:', response.data?.image_url);  // <-- Added log
       if (response.data && response.data.image_url) {
         setPccpImage(response.data.image_url);
         setShowPCCPModal(true);

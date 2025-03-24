@@ -5,3 +5,4 @@ requests
 flask_jwt_extended
 bcrypt
 flask_limiter
+fernet

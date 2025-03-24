@@ -63,6 +63,7 @@ function Register({ isAuthenticated, setIsAuthenticated }) {
     setLoading(true);
     try {
       const response = await api.getPCCPImage();
+      console.log('Register: PCCP image URL fetched:', response.data?.image_url);  // <-- Added log
       if (response.data?.image_url) {
         setPccpImage(response.data.image_url);
         setShowPCCPModal(true);
